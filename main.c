@@ -30,9 +30,19 @@ void mem_cleanup() {
 }
 void *mem_alloc(unsigned int size, int line) {
   struct buddy *memory = mgmt;
-  int i = 2;
-  //for (; size <= i; i *= 2);
-  return 0;
+  unsigned int sizeToAllocate;
+  if (size == 0) {
+    return 0;
+  } else {
+    sizeToAllocate = 65536;
+    while (!(sizeToAllocate & size)) {
+      sizeToAllocate >>= (unsigned int) 1;
+    }
+    if (sizeToAllocate < size) {
+      sizeToAllocate <<= (unsigned int) 1;
+    }
+  }
+  return malloc(sizeToAllocate);
 }
 void mem_free(void *p) {
 }
@@ -72,7 +82,10 @@ const void mem_status() {
 int main() {
   mem_init(totalmem);
   mem_status();
-  void *alloc1 = mem_alloc(1024, __LINE__);
+  void *alloc1 = mem_alloc(367, __LINE__);
+  void *alloc2 = mem_alloc(2048, __LINE__);
+  void *alloc3 = mem_alloc(1, __LINE__);
+  void *alloc4 = mem_alloc(0, __LINE__);
   mem_status();
   mem_cleanup();
   return 0;
