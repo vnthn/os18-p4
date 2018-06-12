@@ -6,7 +6,6 @@ typedef struct block {
   void *next, *startAddress; // used: with 0 meaning free and 1 meaning used
 } block;
 block *mgmt;
-unsigned int nrOfBlocks = 0;
 /**
  * Speicher allokieren
  * @param totalmem Größe des Speichers
@@ -23,7 +22,6 @@ void mem_init(unsigned int totalmem) {
   memory->used = 0;
   memory->next = 0;
   memory->reqSize = totalmem;
-  ++nrOfBlocks;
 }
 /**
  * Speicher freigeben
@@ -53,37 +51,42 @@ void *mem_alloc(unsigned int size, int line) {
   // that size etc.
   for (unsigned int currentBuddySize = 0; (sizeToAllocate << currentBuddySize) <= totalmem; ++currentBuddySize) {
     for (block1 = mgmt; (block1 != 0); block1 = block1->next) {
-      if ((block1->size == (sizeToAllocate << currentBuddySize)) && !(block1->used)) {
-        /* split block into two halves:
-         * start1 = start1
-         * start2 = start1 + size1 / 2
-         * size1 = size1 / 2
-         * size2 = size1
-         * line1 = line
-         * line2 = 0
-         * used2 = used1
-         * used1 = 1
-         * next2 = next1
-         * next1 = start2
-         */
-        block2 = malloc(sizeof(block));
-        block1->size /= 2;
-        block2->startAddress = block1->startAddress + block1->size;
-        block2->size = block1->size;
-        block1->line = line;
-        block2->line = 0;
-        block2->used = block1->used;
-        block1->used = 1;
-        block2->next = block1->next;
-        block1->next = block2;
-        block1->reqSize = size;
-        block2->reqSize = 0;
-        goto end;
+      if (!block1->used) {
+        if (block1->size == sizeToAllocate) {
+          block1->line = line;
+          block1->used = 1;
+          block1->reqSize = size;
+          return block1->startAddress;
+        } else if (block1->size == (sizeToAllocate << currentBuddySize)) {
+          /* split block into two halves:
+           * start1 = start1
+           * start2 = start1 + size1 / 2
+           * size1 = size1 / 2
+           * size2 = size1
+           * line1 = line
+           * line2 = 0
+           * used2 = used1
+           * used1 = 1
+           * next2 = next1
+           * next1 = start2
+           */
+          block2 = malloc(sizeof(block));
+          block1->size /= 2;
+          block2->startAddress = block1->startAddress + block1->size;
+          block2->size = block1->size;
+          block1->line = line;
+          block2->line = 0;
+          block2->used = block1->used;
+          block1->used = 1;
+          block2->next = block1->next;
+          block1->next = block2;
+          block1->reqSize = size;
+          block2->reqSize = 0;
+          return block1->startAddress;
+        }
       }
     }
   }
-  end:;
-  return block1->startAddress;
 }
 void mem_free(void *p) {
 }
@@ -101,32 +104,32 @@ void mem_free(void *p) {
  */
 const void mem_status() {
   int used = 0;
-  block *memory = mgmt;
-  for (int i = 0; i < nrOfBlocks; ++i) {
-    memory += (i) * sizeof(*memory);
-    used += memory->size;
+  block *block;
+  for (block = mgmt; (block->next != 0); block = block->next) {
+    used += block->size;
   }
   printf("Start: %p End: %p\n", mem, mem + totalmem);
   printf("Totalmem: %#x (%u)\n", totalmem, totalmem);
   printf("Total allocated: %#x (%u)\n", used, used);
-  memory = mgmt;
-  for (int i = 0; i < nrOfBlocks; ++i) {
-    memory += (i) * sizeof(*memory);
+  unsigned int allocationNr = 0;
+  for (block = mgmt; (block->next != 0); block = block->next) {
     printf("Allocation %u:\nstart: %p end: %p\nmem_alloc(%u, __LINE__); in line %u\n",
-           i,
-           memory->startAddress,
-           memory->startAddress + memory->size,
-           memory->reqSize,
-           memory->line);
+           allocationNr++,
+           block->startAddress,
+           block->startAddress + block->size,
+           block->reqSize,
+           block->line);
   }
 }
 int main() {
   mem_init(totalmem);
   mem_status();
   void *alloc1 = mem_alloc(367, __LINE__);
+  printf("\nafter 0. allocation\n\n");
+  mem_status();
+  void *alloc2 = mem_alloc(128, __LINE__);
   printf("\nafter 1. allocation\n\n");
   mem_status();
-  void *alloc2 = mem_alloc(1024, __LINE__);
   void *alloc3 = mem_alloc(1, __LINE__);
   void *alloc4 = mem_alloc(0, __LINE__);
   mem_cleanup();
