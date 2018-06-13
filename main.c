@@ -68,16 +68,36 @@ void mem_free(void *p) {
   for (block1 = mgmt; (block1->next != 0); block1 = block1->next) {
     if (block1->startAddress == p) {
       block1->used = 0;
+      break;
     }
   }
-  for (block1 = mgmt, block2 = block1->next; (block1->next != 0) && (block2->next != 0); block1 = block2->next) {
-    printf("hallo!");
+  // join blocks
+  // block1 is still the block which needs to be freed
+  // check if the next block is free so it can be merged
+  // the next block definitely is his buddy
+
+
+
+  if (block1->next) {
+    block2 = block1->next;
+    while (block1->next && !(block1->used)) {
+      if ((block1->size == block2->size) && (!(block1->used) && !(block2->used))) {
+        block1->next = block2->next;
+        block1->size *= 2;
+      } else if ((!(block1->next)) && (block1 != mgmt)) {
+        block1 = mgmt;
+      } else if (block1->next && (block1->size == block2->size)) {
+        block2 = block1->next;
+      } else {
+        break;
+      }
+    }
   }
 }
 const void mem_status() {
   unsigned int used = 0;
   memBlock     *block;
-  for (block = mgmt; (block->next != 0) && block->used; block = block->next) {
+  for (block        = mgmt; (block->next != 0) && block->used; block = block->next) {
     used += block->size;
   }
   printf("Start: %p End: %p\n", mem, mem + totalmem);
@@ -124,16 +144,19 @@ int main() {
   mem_init(totalmem);
   mem_show();
   //mem_status();
-  void *alloc1 = mem_alloc(367, __LINE__);
+  void *alloc0 = mem_alloc(367, __LINE__);
   printf("\nafter 0. allocation\n\n");
   //mem_status();
   mem_show();
-  mem_alloc(128, __LINE__);
+  void *alloc1 = mem_alloc(128, __LINE__);
   printf("\nafter 1. allocation\n\n");
   //mem_status();
   mem_show();
-  mem_free(alloc1);
+  mem_free(alloc0);
   printf("\nafter freeing 0. allocation\n\n");
+  mem_show();
+  mem_free(alloc1);
+  printf("\nafter freeing 1. allocation\n\n");
   mem_show();
   // void *alloc3 = mem_alloc(1, __LINE__);
   // void *alloc4 = mem_alloc(0, __LINE__);
