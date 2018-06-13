@@ -19,6 +19,7 @@ void mem_init(unsigned int totalmem) {
 }
 void mem_cleanup() {
   free(mem);
+  free(mgmt);
 }
 void *mem_alloc(unsigned int size, int line) {
   unsigned int sizeToAllocate = 65536;
@@ -61,14 +62,22 @@ void *mem_alloc(unsigned int size, int line) {
     }
   }
 }
-/*
 void mem_free(void *p) {
+  memBlock *block1, *block2;
+  // free memory by changing used-flag of block to 0 which means free
+  for (block1 = mgmt; (block1->next != 0); block1 = block1->next) {
+    if (block1->startAddress == p) {
+      block1->used = 0;
+    }
+  }
+  for (block1 = mgmt, block2 = block1->next; (block1->next != 0) && (block2->next != 0); block1 = block2->next) {
+    printf("hallo!");
+  }
 }
- */
 const void mem_status() {
   unsigned int used = 0;
   memBlock     *block;
-  for (block        = mgmt; (block->next != 0) && block->used; block = block->next) {
+  for (block = mgmt; (block->next != 0) && block->used; block = block->next) {
     used += block->size;
   }
   printf("Start: %p End: %p\n", mem, mem + totalmem);
@@ -84,18 +93,48 @@ const void mem_status() {
            block->line);
   }
 }
+/*
+ * ┴ │ ┌ ┐└ ┘├ ┤┬ ┴ ┼
+*/
+const void mem_show() {
+  memBlock     *block;
+  unsigned int blockno  = 0;
+  char         line1[1024], line2[1024], line3[1024], line4[1024], line5[1024], line6[1024], line7[1024];
+  char         *line1_p = line1, *line2_p = line2, *line3_p = line3, *line4_p = line4, *line5_p = line5,
+               *line6_p = line6, *line7_p = line7;
+  for (block = mgmt; (block != 0); block = block->next) {
+    line1_p += sprintf(line1_p, "┬───────────────────");
+    line2_p += sprintf(line2_p, "│block no. %*u", 9, blockno);
+    line3_p += sprintf(line3_p, "│   start: %*p", 9, block->startAddress);
+    line4_p += sprintf(line4_p, "│    next: %*p", 9, block->next);
+    line5_p += sprintf(line5_p, "│    size: %*u", 9, block->size);
+    line6_p += sprintf(line6_p, "│    used: %*u", 9, block->used);
+    line7_p += sprintf(line7_p, "┴───────────────────");
+    ++blockno;
+  }
+  printf("%s┐\n", line1);
+  printf("%s│\n", line2);
+  printf("%s│\n", line3);
+  printf("%s│\n", line4);
+  printf("%s│\n", line5);
+  printf("%s│\n", line6);
+  printf("%s┘\n", line7);
+}
 int main() {
   mem_init(totalmem);
-  mem_status();
-  mem_alloc(367, __LINE__);
+  mem_show();
+  //mem_status();
+  void *alloc1 = mem_alloc(367, __LINE__);
   printf("\nafter 0. allocation\n\n");
-  mem_status();
+  //mem_status();
+  mem_show();
   mem_alloc(128, __LINE__);
   printf("\nafter 1. allocation\n\n");
-  mem_status();
-  // mem_free(alloc1);
-  // printf("\nafter freeing 0. allocation\n\n");
-  // mem_status();
+  //mem_status();
+  mem_show();
+  mem_free(alloc1);
+  printf("\nafter freeing 0. allocation\n\n");
+  mem_show();
   // void *alloc3 = mem_alloc(1, __LINE__);
   // void *alloc4 = mem_alloc(0, __LINE__);
   mem_cleanup();
