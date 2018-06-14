@@ -1,6 +1,10 @@
 #include <malloc.h>
 #include <vector>
 #include <algorithm>
+#include <sstream>
+#include <iostream>
+#include <iomanip>
+const bool          mem_show = true;
 typedef struct node {
   unsigned int size, reqSize, line, used;
   struct node  *left, *right, *parent;
@@ -110,8 +114,8 @@ void mem_free(void *p) {
   block       = block->parent;
   // if any child has children or is used, do nothing. otherwise delete the children from the list and free memory.
   // then add the parent of the deleted children to the list of free blocks.
-  if (block->left->left == nullptr || block->left->right == nullptr || !(block->left->used)
-      || block->right->left == nullptr || block->right->right == nullptr || !(block->right->used)) {
+  if ((block->left->left) || (block->left->right) || block->left->used || (block->right->left) || (block->right->right)
+      || block->right->used) {
     return;
   } else {
     std::vector<node *>::iterator it;
@@ -143,6 +147,9 @@ const void mem_status() {
   std::vector<node *> allocations;
   unsigned int        used = 0;
   traverse(root, allocations);
+  std::sort(allocations.begin(), allocations.end(), [](node *a, node *b) {
+    return a->startAddress < b->startAddress;
+  });
   std::for_each(allocations.begin(), allocations.end(), [&used](node *allocation) {
     if (allocation->used) {
       used += allocation->size;
@@ -151,7 +158,7 @@ const void mem_status() {
   printf("Start: %p End: %p\n", mem, mem + totalmem);
   printf("Totalmem: %#x (%u)\n", totalmem, totalmem);
   printf("Total allocated: %#x (%u)\n", used, used);
-  unsigned int allocationNr = 0;
+  unsigned int       allocationNr = 0;
   std::for_each(allocations.begin(), allocations.end(), [&allocationNr](node *allocation) {
     if (allocation->used) {
       printf("Allocation %u:\nstart: %p end: %p\nmem_alloc(%u, __LINE__); in line %u\n",
@@ -162,6 +169,24 @@ const void mem_status() {
              allocation->line);
     }
   });
+  std::wstringstream line1, line2, line3, line4, line5, line6;
+  if (mem_show) {
+    allocationNr = 0;
+    std::for_each(allocations.begin(), allocations.end(), [&](node *allocation) {
+      line1 << "┬───────────────────";
+      line2 << "│block no. " << std::setw(9) << allocationNr++;
+      line3 << "│   start: " << std::setw(9) << allocation->startAddress;
+      line4 << "│    size: " << std::setw(9) << allocation->size;
+      line5 << "│    used: " << std::setw(9) << allocation->used;
+      line6 << "┴───────────────────";
+    });
+    std::wcout << line1.str() << "┐" << std::endl;
+    std::wcout << line2.str() << "│" << std::endl;
+    std::wcout << line3.str() << "│" << std::endl;
+    std::wcout << line4.str() << "│" << std::endl;
+    std::wcout << line5.str() << "│" << std::endl;
+    std::wcout << line6.str() << "┘" << std::endl;
+  }
 }
 int main() {
   mem_init(2048);// Initialisierung des Speichers
@@ -178,3 +203,5 @@ int main() {
   //mem_cleanup();
   return 0;
 }
+
+
