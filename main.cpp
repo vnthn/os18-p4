@@ -29,6 +29,7 @@ void mem_init(unsigned int totalmem) {
 }
 void mem_cleanup() {
   free(mem);
+
 }
 void *mem_alloc(unsigned int size, int line) {
   if (freeBlocks.empty()) {
@@ -111,6 +112,7 @@ void mem_free(void *p) {
     block = block->left;
     goto searchForBlock;
   }
+  merge:
   block       = block->parent;
   // if any child has children or is used, do nothing. otherwise delete the children from the list and free memory.
   // then add the parent of the deleted children to the list of free blocks.
@@ -120,11 +122,11 @@ void mem_free(void *p) {
   } else {
     std::vector<node *>::iterator it;
     it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&block](node *currentNode) {
-      return currentNode->startAddress == block->left;
+      return currentNode == block->left;
     });
     freeBlocks.erase(it);
     it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&block](node *currentNode) {
-      return currentNode->startAddress == block->right;
+      return currentNode == block->right;
     });
     freeBlocks.erase(it);
     free(block->left);
@@ -132,16 +134,19 @@ void mem_free(void *p) {
     block->left  = nullptr;
     block->right = nullptr;
     freeBlocks.push_back(block);
+    goto merge;
   }
 }
 void *traverse(node *root, std::vector<node *> &allocations) {
-  if (root->left != nullptr) {
+  if (root->left) {
     traverse(root->left, allocations);
   }
-  if (root->right != nullptr) {
+  if (root->right) {
     traverse(root->right, allocations);
   }
-  allocations.push_back(root);
+  if (!root->left && !root->right) {
+    allocations.push_back(root);
+  }
 }
 const void mem_status() {
   std::vector<node *> allocations;
@@ -173,19 +178,15 @@ const void mem_status() {
   if (mem_show) {
     allocationNr = 0;
     std::for_each(allocations.begin(), allocations.end(), [&](node *allocation) {
-      line1 << "┬───────────────────";
-      line2 << "│block no. " << std::setw(9) << allocationNr++;
-      line3 << "│   start: " << std::setw(9) << allocation->startAddress;
-      line4 << "│    size: " << std::setw(9) << allocation->size;
-      line5 << "│    used: " << std::setw(9) << allocation->used;
-      line6 << "┴───────────────────";
+      line2 << "block no. " << std::setw(9) << allocationNr++ << " ";
+      line3 << "   start: " << std::setw(9) << allocation->startAddress << " ";
+      line4 << "    size: " << std::setw(9) << allocation->size << " ";
+      line5 << "    used: " << std::setw(9) << allocation->used << " ";
     });
-    std::wcout << line1.str() << "┐" << std::endl;
     std::wcout << line2.str() << "│" << std::endl;
     std::wcout << line3.str() << "│" << std::endl;
     std::wcout << line4.str() << "│" << std::endl;
     std::wcout << line5.str() << "│" << std::endl;
-    std::wcout << line6.str() << "┘" << std::endl;
   }
 }
 int main() {
@@ -200,7 +201,7 @@ int main() {
   mem_free(p1);
   p1 = mem_alloc(400, __LINE__);
   mem_status(); // Aktuelle Speicherbelegung ausgeben
-  //mem_cleanup();
+  mem_cleanup();
   return 0;
 }
 
