@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
-const bool          mem_show    = true;
+bool                mem_show    = false;
 typedef struct node {
   unsigned int size, reqSize, line, used;
   struct node  *left, *right, *parent;
@@ -30,6 +30,10 @@ void traverse(node *root, std::vector<node *> &allocations) {
   }
 }
 void mem_init(unsigned int totalmem) {
+  if (!((totalmem != 0) && !(totalmem & (totalmem - 1)))) {
+    std::cerr << "totalmem has to be a power of 2!" << std::endl;
+    return;
+  }
   totalMemory = totalmem;
   mem         = malloc(totalmem);
   root        = (node *) malloc(sizeof(node));
@@ -208,7 +212,7 @@ const void mem_status() {
              allocation->line);
     }
   });
-  std::wstringstream line1, line2, line3, line4, line5, line6;
+  std::wstringstream line2, line3, line4, line5;
   if (mem_show) {
     allocationNr = 0;
     std::for_each(allocations.begin(), allocations.end(), [&](node *allocation) {
@@ -217,13 +221,14 @@ const void mem_status() {
       line4 << "    size: " << std::setw(9) << allocation->size << " ";
       line5 << "    used: " << std::setw(9) << allocation->used << " ";
     });
-    std::wcout << line2.str() << "│" << std::endl;
-    std::wcout << line3.str() << "│" << std::endl;
-    std::wcout << line4.str() << "│" << std::endl;
-    std::wcout << line5.str() << "│" << std::endl;
+    std::wcout << line2.str() << " " << std::endl;
+    std::wcout << line3.str() << " " << std::endl;
+    std::wcout << line4.str() << " " << std::endl;
+    std::wcout << line5.str() << " " << std::endl;
   }
 }
 int main() {
+  mem_show = true;
   mem_init(2048);// Initialisierung des Speichers
   void *p1 = mem_alloc(1024, __LINE__);
   void *p2 = mem_alloc(1024, __LINE__);
@@ -246,7 +251,6 @@ int main() {
   mem_status();
   mem_cleanup();
   mem_status();
+  mem_init(1234);
   return 0;
 }
-
-
