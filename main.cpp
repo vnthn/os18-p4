@@ -164,7 +164,7 @@ void *mem_alloc(unsigned int size, int line) {
     block->left->right         = nullptr;
     // generate and assign right child
     block->right               = (node *) malloc(sizeof(node));
-    block->right->startAddress = block->startAddress + block->size / 2;
+    block->right->startAddress = ((uintptr_t *) block->startAddress) + (block->size / 2);
     block->right->size         = block->size / 2;
     block->right->used         = 0;
     block->right->parent       = block;
@@ -198,7 +198,7 @@ const void mem_status() {
       used += allocation->size;
     }
   });
-  printf("Start: %p End: %p\n", mem, mem + totalMemory);
+  printf("Start: %p End: %p\n", mem, ((uintptr_t *) mem) + totalMemory);
   printf("Totalmem: %#x (%u)\n", totalMemory, totalMemory);
   printf("Total allocated: %#x (%u)\n", used, used);
   unsigned int       allocationNr = 0;
@@ -206,8 +206,7 @@ const void mem_status() {
     if (allocation->used) {
       printf("Allocation %u:\nstart: %p end: %p\nmem_alloc(%u, __LINE__); in line %u\n",
              allocationNr++,
-             allocation->startAddress,
-             allocation->startAddress + allocation->size,
+             allocation->startAddress, ((uintptr_t *) allocation->startAddress) + allocation->size,
              allocation->reqSize,
              allocation->line);
     }
@@ -231,14 +230,14 @@ int main() {
   mem_show = true;
   mem_init(2048);// Initialisierung des Speichers
   void *p1 = mem_alloc(1024, __LINE__);
-  void *p2 = mem_alloc(1024, __LINE__);
+  mem_alloc(1024, __LINE__);
   void *p3 = mem_alloc(1024, __LINE__);
   mem_free(p1);
   mem_free(p3);
-  p1       = mem_alloc(123, __LINE__);
-  p3       = mem_alloc(512, __LINE__);
+  p1 = mem_alloc(123, __LINE__);
+  mem_alloc(512, __LINE__);
   mem_free(p1);
-  p1 = mem_alloc(400, __LINE__);
+  mem_alloc(400, __LINE__);
   mem_status(); // Aktuelle Speicherbelegung ausgeben
   mem_cleanup();
   mem_init(4096);
