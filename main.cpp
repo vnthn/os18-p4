@@ -95,13 +95,19 @@ void mem_free(void *p) {
 }
 void mem_cleanup() {
   free(mem);
-  freeBlocks = {};
   std::vector<node *> allocations;
   traverse(root, allocations);
-  std::for_each(allocations.begin(), allocations.end(), [](node *currentNode) {
-    mem_free(currentNode->startAddress);
-  });
-  free(root);
+  if (allocations.size() == 1) {
+    free(*allocations.begin());
+  } else {
+    std::for_each(allocations.begin(), allocations.end(), [](node *currentNode) {
+      if (currentNode->used) {
+        mem_free(currentNode->startAddress);
+      }
+    });
+  }
+  freeBlocks  = {};
+  totalMemory = 0;
 }
 void *mem_alloc(unsigned int size, int line) {
   if (freeBlocks.empty()) {
@@ -173,6 +179,10 @@ void *mem_alloc(unsigned int size, int line) {
   }
 }
 const void mem_status() {
+  if (totalMemory == 0) {
+    std::cerr << "memory has not been initialized yet!" << std::endl;
+    return;
+  }
   std::vector<node *> allocations;
   unsigned int        used = 0;
   traverse(root, allocations);
@@ -227,7 +237,14 @@ int main() {
   mem_status(); // Aktuelle Speicherbelegung ausgeben
   mem_cleanup();
   mem_init(4096);
-  mem_alloc(3, __LINE__);
+  void *p4 = mem_alloc(3, __LINE__);
+  mem_status();
+  void *p5 = mem_alloc(1024, __LINE__);
+  mem_free(p4);
+  mem_status();
+  mem_free(p5);
+  mem_status();
+  mem_cleanup();
   mem_status();
   return 0;
 }
