@@ -1,0 +1,180 @@
+#include <malloc.h>
+#include <vector>
+#include <algorithm>
+typedef struct node {
+  unsigned int size, reqSize, line, used;
+  struct node  *left, *right, *parent;
+  void         *startAddress;
+}                   node;
+const unsigned int  totalmem = 2048;
+void                *mem;
+node                *root;
+std::vector<node *> freeBlocks;
+void mem_init(unsigned int totalmem) {
+  mem  = malloc(totalmem);
+  root = (node *) malloc(sizeof(node));
+  root->size         = totalmem;
+  root->reqSize      = totalmem;
+  root->line         = 0;
+  root->used         = 0;
+  root->left         = nullptr;
+  root->right        = nullptr;
+  root->startAddress = mem;
+  root->parent       = nullptr;
+  freeBlocks.push_back(root);
+}
+void mem_cleanup() {
+  free(mem);
+}
+void *mem_alloc(unsigned int size, int line) {
+  if (freeBlocks.empty()) {
+    return nullptr;
+  }
+  unsigned int sizeToAllocate             = 65536;
+  if (size == 0 || size > totalmem) {
+    return nullptr;
+  } else if (size == 1) {
+    sizeToAllocate = 1;
+  } else {
+    while (sizeToAllocate >= size) {
+      sizeToAllocate >>= 1;
+    }
+    sizeToAllocate <<= 1;
+  }
+  getFreeBlockFromList:
+  // search for a free block in the list of free blocks until the highest possible size is reached or a sufficient free
+  // block is found
+  std::vector<node *>::iterator it;
+  unsigned int                  searchFor = sizeToAllocate;
+  while (true) {
+    it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&searchFor](node *currentNode) {
+      return currentNode->size == searchFor;
+    });
+    if (it == freeBlocks.end() && searchFor > totalmem) {
+      return nullptr;
+    } else if (it == freeBlocks.end()) {
+      searchFor *= 2;
+    } else {
+      break;
+    }
+  }
+  node                          *block    = *it;
+  if (block->size == sizeToAllocate && !block->right && !block->left) {
+    freeBlocks.erase(it);
+    block->used    = 1;
+    block->line    = (unsigned int) line;
+    block->reqSize = size;
+    return block->startAddress;
+  } else if ((block->size != sizeToAllocate) && (block->right == nullptr) && (block->left == nullptr)) {
+    // split the current block
+    // generate and assign left child
+    block->left                = (node *) malloc(sizeof(node));
+    block->left->startAddress  = block->startAddress;
+    block->left->size          = block->size / 2;
+    block->left->used          = 0;
+    block->left->parent        = block;
+    // generate and assign right child
+    block->right               = (node *) malloc(sizeof(node));
+    block->right->startAddress = block->startAddress + block->size / 2;
+    block->right->size         = block->size / 2;
+    block->right->used         = 0;
+    block->right->parent       = block;
+    // delete parent, add both children to list of free blocks and sort the list after startAddress
+    freeBlocks.erase(it);
+    freeBlocks.push_back(block->left);
+    freeBlocks.push_back(block->right);
+    std::sort(freeBlocks.begin(), freeBlocks.end(), [](node *a, node *b) {
+      return a->startAddress < b->startAddress;
+    });
+    goto getFreeBlockFromList;
+  } else {
+    return nullptr;
+  }
+}
+void mem_free(void *p) {
+  if (p == nullptr) {
+    return;
+  }
+  node *block = root;
+  searchForBlock:
+  if ((block->startAddress == p) && block->used) {
+    block->used = 0;
+    freeBlocks.push_back(block);
+  } else if (block->right->startAddress <= p) {
+    block = block->right;
+    goto searchForBlock;
+  } else {
+    block = block->left;
+    goto searchForBlock;
+  }
+  block       = block->parent;
+  // if any child has children or is used, do nothing. otherwise delete the children from the list and free memory.
+  // then add the parent of the deleted children to the list of free blocks.
+  if (block->left->left == nullptr || block->left->right == nullptr || !(block->left->used)
+      || block->right->left == nullptr || block->right->right == nullptr || !(block->right->used)) {
+    return;
+  } else {
+    std::vector<node *>::iterator it;
+    it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&block](node *currentNode) {
+      return currentNode->startAddress == block->left;
+    });
+    freeBlocks.erase(it);
+    it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&block](node *currentNode) {
+      return currentNode->startAddress == block->right;
+    });
+    freeBlocks.erase(it);
+    free(block->left);
+    free(block->right);
+    block->left  = nullptr;
+    block->right = nullptr;
+    freeBlocks.push_back(block);
+  }
+}
+void *traverse(node *root, std::vector<node *> &allocations) {
+  if (root->left != nullptr) {
+    traverse(root->left, allocations);
+  }
+  if (root->right != nullptr) {
+    traverse(root->right, allocations);
+  }
+  allocations.push_back(root);
+}
+const void mem_status() {
+  std::vector<node *> allocations;
+  unsigned int        used = 0;
+  traverse(root, allocations);
+  std::for_each(allocations.begin(), allocations.end(), [&used](node *allocation) {
+    if (allocation->used) {
+      used += allocation->size;
+    }
+  });
+  printf("Start: %p End: %p\n", mem, mem + totalmem);
+  printf("Totalmem: %#x (%u)\n", totalmem, totalmem);
+  printf("Total allocated: %#x (%u)\n", used, used);
+  unsigned int allocationNr = 0;
+  std::for_each(allocations.begin(), allocations.end(), [&allocationNr](node *allocation) {
+    if (allocation->used) {
+      printf("Allocation %u:\nstart: %p end: %p\nmem_alloc(%u, __LINE__); in line %u\n",
+             allocationNr++,
+             allocation->startAddress,
+             allocation->startAddress + allocation->size,
+             allocation->reqSize,
+             allocation->line);
+    }
+  });
+}
+int main() {
+  mem_init(2048);// Initialisierung des Speichers
+  void *p1 = mem_alloc(1024, __LINE__);
+  void *p2 = mem_alloc(1024, __LINE__);
+  void *p3 = mem_alloc(1024, __LINE__);
+  mem_free(p1);
+  mem_free(p3);
+  p1       = mem_alloc(123, __LINE__);
+  p3       = mem_alloc(512, __LINE__);
+  mem_free(p1);
+  p1 = mem_alloc(400, __LINE__);
+  mem_status(); // Aktuelle Speicherbelegung ausgeben
+  //mem_cleanup();
+  return 0;
+}
