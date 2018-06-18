@@ -1,29 +1,34 @@
+/*
+ * Betriebssysteme, Sommersemester 2018
+ * Nils von Nethen
+ * Niklas Hansel
+ */
 #include <malloc.h>
 #include <vector>
 #include <algorithm>
 #include <sstream>
 #include <iostream>
 #include <iomanip>
-bool                mem_show    = false;
+bool                showFullMemory    = false;
+unsigned int        sizeOfTotalMemory = 0;
+void                *mem;
 typedef struct node {
   unsigned int size, reqSize, line, used;
   struct node  *left, *right, *parent;
   void         *startAddress;
 }                   node;
-unsigned int        totalMemory = 0;
-void                *mem;
 node                *root;
 std::vector<node *> freeBlocks;
-void traverse(node *root, std::vector<node *> &allocations);
+void traverse(node *currentNode, std::vector<node *> &allocations);
 void mem_init(unsigned int totalmem);
 void mem_free(void *p);
 void mem_cleanup();
 void *mem_alloc(unsigned int size, int line);
 const void mem_status();
 int main() {
-  mem_show = true;
+  showFullMemory = true;
   mem_init(2048);// Initialisierung des Speichers
-  void *p1 = mem_alloc(1024, __LINE__);
+  void *p1       = mem_alloc(1024, __LINE__);
   mem_alloc(1024, __LINE__);
   void *p3 = mem_alloc(1024, __LINE__);
   mem_free(p1);
@@ -46,16 +51,16 @@ int main() {
   mem_status();
   mem_init(1234);
 }
-void traverse(node *root, std::vector<node *> &allocations) {
-  if (root) {
-    if (root->left) {
-      traverse(root->left, allocations);
+void traverse(node *currentNode, std::vector<node *> &allocations) {
+  if (currentNode) {
+    if (currentNode->left) {
+      traverse(currentNode->left, allocations);
     }
-    if (root->right) {
-      traverse(root->right, allocations);
+    if (currentNode->right) {
+      traverse(currentNode->right, allocations);
     }
-    if (!root->left && !root->right) {
-      allocations.push_back(root);
+    if (!currentNode->left && !currentNode->right) {
+      allocations.push_back(currentNode);
     }
   } else {
     return;
@@ -66,9 +71,9 @@ void mem_init(unsigned int totalmem) {
     std::cerr << "totalmem has to be a power of 2!" << std::endl;
     return;
   }
-  totalMemory = totalmem;
-  mem         = malloc(totalmem);
-  root        = (node *) malloc(sizeof(node));
+  sizeOfTotalMemory = totalmem;
+  mem               = malloc(totalmem);
+  root              = (node *) malloc(sizeof(node));
   root->size         = totalmem;
   root->reqSize      = totalmem;
   root->line         = 0;
@@ -100,10 +105,9 @@ void mem_free(void *p) {
       block = block->parent;
       // if any child has children or is used, do nothing. otherwise delete the children from the list and free memory.
       // then add the parent of the deleted children to the list of free blocks.
-      if (!(block->left->left) && !(block->left->right) && !block->left->used && !(block->right->left)
-          && !(block->right->right) && !(block->right->used)) {
+      if (!(block->left->left) && !(block->left->right) && !block->left->used && !(block->right->left) && !(block->right->right) && !(block->right->used)) {
         std::vector<node *>::iterator it;
-        it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&block](node *currentNode) {
+        it           = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&block](node *currentNode) {
           return currentNode == block->left;
         });
         freeBlocks.erase(it);
@@ -133,8 +137,8 @@ void mem_cleanup() {
       }
     });
   }
-  freeBlocks  = {};
-  totalMemory = 0;
+  freeBlocks        = {};
+  sizeOfTotalMemory = 0;
 }
 void *mem_alloc(unsigned int size, int line) {
   void *alloc = nullptr;
@@ -145,7 +149,7 @@ void *mem_alloc(unsigned int size, int line) {
     // block is found
     std::vector<node *>::iterator it             = freeBlocks.end();
     unsigned int                  searchFor      = sizeToAllocate;
-    while (searchFor <= totalMemory && it == freeBlocks.end()) {
+    while (searchFor <= sizeOfTotalMemory && it == freeBlocks.end()) {
       it = std::find_if(freeBlocks.begin(), freeBlocks.end(), [&searchFor](node *currentNode) {
         return currentNode->size == searchFor;
       });
@@ -160,8 +164,7 @@ void *mem_alloc(unsigned int size, int line) {
         block->reqSize = size;
         alloc = block->startAddress;
       } else if ((block->size != sizeToAllocate) && (block->right == nullptr) && (block->left == nullptr)) {
-        // split the current block
-        // generate and assign left child
+        // split the current block, then generate and assign left child
         block->left                = (node *) malloc(sizeof(node));
         block->left->startAddress  = block->startAddress;
         block->left->size          = block->size / 2;
@@ -177,7 +180,9 @@ void *mem_alloc(unsigned int size, int line) {
         block->right->parent       = block;
         block->right->left         = nullptr;
         block->right->right        = nullptr;
-        // delete parent, add both children to list of free blocks and sort the list after startAddress
+        // delete parent from list of free blocks (as it has children now it cannot be allocated),
+        // then add both children to the list of free blocks and sort the list by startAddress so that the leftmost
+        // block is found first when searching for a block
         freeBlocks.erase(it);
         freeBlocks.push_back(block->left);
         freeBlocks.push_back(block->right);
@@ -191,39 +196,39 @@ void *mem_alloc(unsigned int size, int line) {
   return alloc;
 }
 const void mem_status() {
-  if (totalMemory == 0) {
+  if (sizeOfTotalMemory == 0) {
     std::cerr << "memory has not been initialized yet!" << std::endl;
     return;
   }
-  std::vector<node *> allocations;
+  std::vector<node *> allBlocks;
   unsigned int        used = 0;
-  traverse(root, allocations);
-  std::sort(allocations.begin(), allocations.end(), [](node *a, node *b) {
+  traverse(root, allBlocks);
+  std::sort(allBlocks.begin(), allBlocks.end(), [](node *a, node *b) {
     return a->startAddress < b->startAddress;
   });
-  std::for_each(allocations.begin(), allocations.end(), [&used](node *allocation) {
-    if (allocation->used) {
-      used += allocation->size;
+  std::for_each(allBlocks.begin(), allBlocks.end(), [&used](node *block) {
+    if (block->used) {
+      used += block->size;
     }
   });
-  printf("Start: %p End: %p\n", mem, ((uintptr_t *) mem) + totalMemory);
-  printf("Totalmem: %#x (%u)\n", totalMemory, totalMemory);
+  printf("Start: %p End: %p\n", mem, ((uintptr_t *) mem) + sizeOfTotalMemory);
+  printf("Totalmem: %#x (%u)\n", sizeOfTotalMemory, sizeOfTotalMemory);
   printf("Total allocated: %#x (%u)\n", used, used);
   unsigned int       allocationNr = 0;
-  std::for_each(allocations.begin(), allocations.end(), [&allocationNr](node *allocation) {
-    if (allocation->used) {
+  std::for_each(allBlocks.begin(), allBlocks.end(), [&allocationNr](node *block) {
+    if (block->used) {
       printf("Allocation %u:\nstart: %p end: %p\nmem_alloc(%u, __LINE__); in line %u\n",
              allocationNr++,
-             allocation->startAddress,
-             ((uintptr_t *) allocation->startAddress) + allocation->size,
-             allocation->reqSize,
-             allocation->line);
+             block->startAddress,
+             ((uintptr_t *) block->startAddress) + block->size,
+             block->reqSize,
+             block->line);
     }
   });
   std::wstringstream line2, line3, line4, line5;
-  if (mem_show) {
+  if (showFullMemory) {
     allocationNr = 0;
-    std::for_each(allocations.begin(), allocations.end(), [&](node *allocation) {
+    std::for_each(allBlocks.begin(), allBlocks.end(), [&](node *allocation) {
       line2 << "block no. " << std::setw(9) << allocationNr++ << " ";
       line3 << "   start: " << std::setw(9) << allocation->startAddress << " ";
       line4 << "    size: " << std::setw(9) << allocation->size << " ";
